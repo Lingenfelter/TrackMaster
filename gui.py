@@ -26,7 +26,7 @@ def get_plot_data():
         data = aRec.get_plotRec()
         set_value('ch_1', data[0])
         set_value('ch_2', data[1])
-        x_range = [x*5 for x in range(len(data[0]))]
+        x_range = [x for x in range(len(data[0]))]
         add_line_series('audio_plot', 'right channel', x_range, data[0], weight=2.5)
         add_line_series('audio_plot', 'left channel', x_range, data[1], weight=2.5, color=[155,50,50,75])
 

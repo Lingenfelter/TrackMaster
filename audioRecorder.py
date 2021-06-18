@@ -11,8 +11,9 @@ haltSignal = threading.Event()
 playbackVolume = 0.0
 q = queue.Queue()
 
-plotRecSize = 10_000
-plotRecStepAmt = 20
+# Initialize the array that gets sent to the gui for the visual waveform
+plotRecSize = 5_000
+plotRecStepAmt = 40
 plotRec = numpy.ndarray(shape=(plotRecSize, 2), buffer=numpy.array([[0.0, 0.0] * plotRecSize]))
 
 
@@ -25,7 +26,7 @@ def callback(indata, outdata, frames, time, status):
     global plotRec
     if status:
         print(status, file=sys.stderr)
-    outdata[:] = indata.copy() * playbackVolume
+    outdata[:] = indata * playbackVolume
     q.put(indata.copy())
 
 
@@ -33,11 +34,16 @@ def _record(stop_event):
     global plotRec
     device = sd.query_devices(None, 'input')
 
-    with sf.SoundFile('recordings/file.wav', mode='x', samplerate=int(device['default_samplerate']), channels=2) as file:
+    with sf.SoundFile('recordings/working/audio.flac', mode='x', samplerate=int(device['default_samplerate']),
+                      channels=2) as file:
         with sd.Stream(channels=2, callback=callback):
             while not stop_event.is_set():
                 data = q.get()
+
+                # Write input stream to audio file
                 file.write(data)
+
+                # Write input stream to waveform array then trim the waveform array
                 plotRec = numpy.append(plotRec, data[::plotRecStepAmt], axis=0)
                 if plotRec.size > plotRecSize:
                     plotRec = plotRec[-plotRecSize:]
