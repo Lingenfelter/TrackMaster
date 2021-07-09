@@ -9,6 +9,32 @@ x_range = [x for x in range(aRec.plotRecSize)]
 # Filesystem head
 file_head: RecordFileSystem
 
+center_items = []
+add_data('item_center_list', center_items)
+
+
+def apply_centering():
+    items = list(get_data("item_center_list"))
+    if items:
+        for item in items:
+            container_width = get_item_rect_size(get_item_parent(item))[0]
+            item_width, item_height = get_item_rect_size(item)
+            set_item_height(f'{item}_container', int(item_height))
+            pos = int((container_width / 2) - (item_width / 2))
+            set_item_width(f'{item}_dummy', pos)
+
+
+def center_item(name: str):
+    with child(f'{name}_container', autosize_x=True, no_scrollbar=True, border=False):
+        add_dummy(name=f'{name}_dummy')
+        add_same_line(name=f'{name}_sameline')
+        move_item(name, parent=f'{name}_container')
+    items = list(get_data('item_center_list'))
+    items.append(name)
+    add_data('item_center_list', items)
+    y_space = get_style_item_spacing()[1]
+    set_item_style_var(f'{name}_container', mvGuiStyleVar_ItemSpacing, [0, y_space])
+
 
 def toggle_recording():
     global currently_recording
@@ -27,14 +53,19 @@ def send_volume(sender, data):
 
 
 def get_plot_data():
-    if currently_recording:
-        data = aRec.get_plotRec()
-        set_value('ch_1', data[0])
-        set_value('ch_2', data[1])
-        add_line_series('audio_plot', 'right channel', x_range, data[0], weight=2.5)
-        add_line_series('audio_plot', 'left channel', x_range, data[1], weight=2.5, color=[155, 50, 50, 75])
-        bounds = aRec.recording_threshold
-        add_hline_series('audio_plot', 'bounds', [bounds, -bounds])
+    data = aRec.get_plotRec()
+    add_line_series('audio_plot', 'right channel', x_range, data[0], weight=2.5)
+    add_line_series('audio_plot', 'left channel', x_range, data[1], weight=2.5, color=[155, 50, 50, 75])
+    bounds = aRec.recording_threshold
+    add_hline_series('audio_plot', 'bounds', [bounds, -bounds])
+
+
+def get_song_info():
+    data = aRec.song_info
+    if data:
+        set_value('artist', 'Artist:' + data[0])
+        set_value('album', 'Album:' + data[1])
+        set_value('song', 'Song:' + data[2])
 
 
 def show_gui():
@@ -53,22 +84,42 @@ def show_gui():
         add_same_line()
 
         with child('r_column', autosize_x=True, autosize_y=True):
-            add_text('File side')
+            with group('track_info'):
+                add_image('album_image', 'recordings/working/album.jpg', width=200, height=200)
+                add_text('artist', default_value='Artist:')
+                add_text('album', default_value='Album:')
+                add_text('song', default_value='Song:')
+            center_item('track_info')
+            add_spacing(count=3)
+            add_separator(name='r_panel_separator')
+            add_spacing(count=3)
+            with group('file_display'):
+                add_text('File information')
 
-    def resize():
-        l_column_width = int(get_main_window_size()[0] * (2 / 3))
+    def resize(sender, data):
+        x, y = get_main_window_size()
+        l_column_width = int(x * 0.7)
         set_item_width('l_column', width=l_column_width)
 
     def on_close():
         if currently_recording:
             aRec.stop_recording()
 
+    def update(sender, data):
+        apply_centering()
+        if currently_recording:
+            get_plot_data()
+            get_song_info()
+
     # show_metrics()
     # show_documentation()
 
-    set_render_callback(get_plot_data)
+    set_render_callback(update)
     set_start_callback(resize)
     set_resize_callback(resize)
     set_exit_callback(on_close)
+
+    set_main_window_size(1100, 700)
+    set_main_window_title('TrackMaster')
 
     start_dearpygui(primary_window='main')
