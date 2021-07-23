@@ -11,7 +11,7 @@ brain.set_useragent('TrackMaster', '0.1', 'M.Lingenfelter92@gmail.com')
 def identify_track(file: str, beginning, end, dump=True):
     output = 'recordings/working/identify.wav'
     with sf.SoundFile(file) as source:
-        time_to_identify = source.samplerate * 25
+        time_to_identify = source.samplerate * 20
         frames = end - beginning
         if frames > time_to_identify:
             seek = end - time_to_identify

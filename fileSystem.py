@@ -56,9 +56,12 @@ class AudioFile(File):
         self.samplerate = 0
         self.is_identified = False
 
-    def set_track(self, start, end):
-        self.data[0] = start
-        self.data[1] = end
+    def set_end(self, end):
+        cutoff = 0.1 * self.samplerate
+        if end - self.data[0] > cutoff:
+            self.data[1] = end
+        else:
+            self.parent.remove_element(self)
 
     def merge(self, target):
         self.data[1] = target.data[1]
@@ -88,48 +91,53 @@ class AudioFile(File):
                     source.seek(start)
                     path = self.get_path() + self.filetype
                     sf.write(path, source.read(frames=frames), source.samplerate)
-                    print(f'{self.name = }: saved')
                 except Exception as e:
-                    print('exception:', e)
                     print('-' * 50)
+                    print('exception:', e)
                     print(f'track {self.name} \t start: {start} \t end: {self.data[1]} \t diff {frames} ')
-        else:
-            print(f'File {self.name} not long enough to save')
+                    print('-' * 50)
 
 
 class ImageFile(File):
     def __init__(self, name, filetype='.png', data=None):
+        self.updated = False
         File.__init__(self, name, filetype, data)
 
     def set_image(self, data):
         self.data = Image.open(io.BytesIO(data))
 
-    def save(self):
-        path = self.get_path() + self.filetype
-        if os.path.exists(path):
-            os.remove(path)
-        self.data.save(path)
-        self.data.close()
+    def save(self, path=None, close=True):
+        try:
+            if path is None:
+                path = self.get_path() + self.filetype
+            if os.path.exists(path):
+                os.remove(path)
+            self.data.save(path)
+            if close:
+                self.data.close()
+        except Exception as e:
+            print(f'exception: {e}')
 
 
 class RecordFileSystem:
     def __init__(self):
         self.artist = Directory('artist')
         self.album = Directory('album')
+        self.album_art = ImageFile('img')
         self.samplerate = 0
-        self.cutoff = 0.1  # Minimum time, in seconds that a track needs to be larger than
         self.identify_at = 30
         self.potential_albums = {}
+        self.album_id = None
 
         self.artist.add_child(self.album)
+        self.album.add_child(self.album_art)
 
         # How close, in seconds, that the end of one track and the beginning of the next need to be to merge
         self.merge_threshold = 1.5
 
     def identify_latest(self, curr_pos):
-        default_msg = 'Nothing yet'
-        if len(self.album.data) == 0:
-            return [default_msg * 3]
+        if len(self.album.data) == 1:
+            return None
         # Get last track
         track = self.album.data[-1]
 
@@ -139,50 +147,73 @@ class RecordFileSystem:
 
         # Otherwise, check if the track is long enough
         elif curr_pos - track.data[0] > self.samplerate * 30:
-            print('Identifying...', end='\t')
             # Identify track
             info = audID.identify_track(track.audio_source, track.data[0], curr_pos)
             # If there is a result, assign it to the track
             if info['result']:
-                track.name = info['result']['title']
+                # Set basic info for the track
+                name = info['result']['title']
+
+                for char in ['\\', '/', ':', '*', '?', '"', '<', '>', '|']:
+                    name = name.replace(char, '-')
+
+                track.name = name
+                track.album = info['result']['album']
                 track.artist = info['result']['artist']
-                print('Returned result...', end='\t')
+
+                # Check if all the results have arrived
                 if 'musicbrainz' in info['result']:
-                    for release in info['result']['musicbrainz']['releases']:
-                        if release['id'] in self.potential_albums:
-                            data = self.potential_albums[release['id']]
-                            data[2] += 1
-                            self.potential_albums[release['id']] = data
-                        else:
-                            self.potential_albums[release['id']] = [release['title'], release['media']['track']['number'], 1]
-                    print('Fully identified')
+
+                    most_common_album_count = 0
+
+                    for version in info['result']['musicbrainz']:
+                        for album in version['releases']:
+                            if album['id'] in self.potential_albums:
+                                existing_album = self.potential_albums[album['id']]
+                                album_occurrence = existing_album[1] + 1
+                                title = existing_album[0]
+                            else:
+                                album_occurrence = 1
+                                title = album['title']
+
+                            self.potential_albums[album['id']] = [title, album_occurrence]
+
+                            if album_occurrence > most_common_album_count:
+                                if self.album_id is not album['id']:
+                                    self.album_id = album['id']
+                                    self.album.name = title
+                                    self.album_art.updated = True
+
+                                most_common_album_count = album_occurrence
+
+                    if self.album_art.updated:
+                        self.album_art.set_image(audID.get_art(self.album_id))
+                        self.album_art.save('recordings/working/album.jpg', False)
                     track.is_identified = True
-                else:
-                    print('Still not identified')
+
                 return [track.artist, track.album, track.name]
 
-        return [default_msg * 3]
+        return None
 
     def add_track(self, track):
         track.samplerate = self.samplerate
-        # If the track is larger than the cutoff, add the track.
-        if track.data[1] - track.data[0] > self.samplerate * self.cutoff:
-            # If track is not the first element, compare it to the previous track
-            if len(self.album.data) > 0:
-                track_spacing = self.samplerate * self.merge_threshold
-                prev_track = self.album.data[-1]
+        if len(self.album.data) > 1:
+            track_spacing = self.samplerate * self.merge_threshold
+            prev_track = self.album.data[-1]
 
-                # If this track and the previous track are with-in the merging threshold, merge
-                if track.data[0] - prev_track.data[1] < track_spacing:
-                    prev_track.merge(track)
-
-                # Otherwise make it a new track.
-                else:
-                    self.album.add_child(track)
-            else:
+            if track.data[0] - prev_track.data[1] > track_spacing:
                 self.album.add_child(track)
+        else:
+            self.album.add_child(track)
+
+    def set_latest_track_end(self, end):
+        track = self.album.data[-1]
+        track.set_end(end)
+
+    def get_album_art(self):
+        if self.album_art.updated:
+            return 'recordings/working/album.jpg'
+        return None
 
     def save_all(self):
-        print('-' * 50, '\nSaving ...')
-        print(f'{self.potential_albums = }')
         self.artist.save_tree()

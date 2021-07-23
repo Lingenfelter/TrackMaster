@@ -15,7 +15,7 @@ assert numpy
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
 haltSignal = threading.Event()
-playbackVolume = 0.25
+playbackVolume = 0.5
 q = queue.Queue()
 
 # Initialize the array that gets sent to the gui for the visual waveform
@@ -37,7 +37,8 @@ file_head: RecordFileSystem
 
 # Identified Song info
 default_msg = 'Nothing yet'
-song_info = [default_msg * 3]
+song_info = [default_msg] * 3
+finished_identification = True
 
 
 def set_volume(vol):
@@ -71,11 +72,10 @@ def _record(stop_event):
 
                 # Get current position
                 curr_pos = current_recording.tell()
-
                 find_track_edges(curr_pos, data_max)
 
                 # Attempt to identify the current recording, then add thirty sec to the identify counter
-                if identify_at < curr_pos:
+                if identify_at < curr_pos and executor._work_queue.qsize() < 2:
                     executor.submit(attempt_identification, curr_pos)
                     identify_at += 10 * current_recording.samplerate
 
@@ -93,11 +93,10 @@ def find_track_edges(curr_pos, data_max):
             track_num += 1
             track = AudioFile(str(track_num))
             track.data[0] = curr_pos
+            file_head.add_track(track)
             is_track = True
         elif data_max < recording_threshold and is_track:
-            track.set_track(track.data[0], curr_pos)
-            file_head.add_track(track)
-            song_info = [default_msg * 3]
+            file_head.set_latest_track_end(curr_pos)
             is_track = False
 
     # Otherwise find the minimum threshold from the album's noise
@@ -105,7 +104,7 @@ def find_track_edges(curr_pos, data_max):
         if beginning_of_album == 0:
             if 0.05 < data_max < 0.1:
                 beginning_of_album = curr_pos
-                identify_at = beginning_of_album + 30 * samplerate
+                identify_at = beginning_of_album + 20 * samplerate
 
         # Read in a fixed amount of noise data (2 sec) and add the max volume to an array
         elif curr_pos - beginning_of_album < samplerate * 2.0:

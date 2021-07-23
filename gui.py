@@ -85,7 +85,8 @@ def show_gui():
 
         with child('r_column', autosize_x=True, autosize_y=True):
             with group('track_info'):
-                add_image('album_image', 'recordings/working/album.jpg', width=200, height=200)
+                add_drawing('album_image', width=200, height=200)
+                draw_image('album_image', 'recordings/working/default.jpg', [0.0, 0.0], [200, 200])
                 add_text('artist', default_value='Artist:')
                 add_text('album', default_value='Album:')
                 add_text('song', default_value='Song:')
@@ -110,6 +111,11 @@ def show_gui():
         if currently_recording:
             get_plot_data()
             get_song_info()
+            album_art = file_head.get_album_art()
+            if album_art is not None:
+                clear_drawing('album_image')
+                draw_image('album_image', file_head.get_album_art(), [0.0, 0.0], [200, 200])
+                file_head.album_art.updated = False
 
     # show_metrics()
     # show_documentation()
@@ -120,6 +126,7 @@ def show_gui():
     set_exit_callback(on_close)
 
     set_main_window_size(1100, 700)
+    set_main_window_pos(820, 0)
     set_main_window_title('TrackMaster')
 
     start_dearpygui(primary_window='main')
