@@ -127,6 +127,6 @@ def show_gui():
 
     set_main_window_size(1100, 700)
     set_main_window_pos(820, 0)
-    set_main_window_title('TrackMaster')
+    set_main_window_title('Trackmaster')
 
     start_dearpygui(primary_window='main')
