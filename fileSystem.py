@@ -48,9 +48,10 @@ class Directory(File):
 
 class AudioFile(File):
     def __init__(self, name='', filetype='.wav'):
-        File.__init__(self, name, filetype, data=[0, 0])
+        File.__init__(self, name, filetype, data=[0, None])
         self.audio_source = 'recordings/working/audio.wav'
         self.padding = 0.0  # Seconds added before and after a track
+        self.album_pos = 0
         self.artist = ''
         self.album = ''
         self.samplerate = 0
@@ -69,7 +70,6 @@ class AudioFile(File):
     def save(self):
         # All print statements are for real-time use debugging, will be used to monitor when connected
         # to a record player.
-        global track_num
         min_length = 30 * self.samplerate
         if self.data[1] - self.data[0] > min_length:
             with sf.SoundFile(self.audio_source) as source:
@@ -80,8 +80,7 @@ class AudioFile(File):
                 frames = (int(self.data[1]) - start)
                 try:
                     # Save the track in a "## - name.file" convention.
-                    track_num += 1
-                    self.name = str('{:02d}'.format(track_num)) + ' - ' + self.name
+                    self.name = str('{:02d}'.format(self.album_pos)) + ' - ' + self.name
 
                     # Add a small amount of recording padding to ensure that the whole note that triggered
                     # the recording is captured.
@@ -136,19 +135,24 @@ class RecordFileSystem:
         self.merge_threshold = 1.5
 
     def identify_latest(self, curr_pos):
+        global track_num
         if len(self.album.data) == 1:
             return None
         # Get last track
         track = self.album.data[-1]
-
         # Check if it's already identified
         if track.is_identified:
-            return [track.artist, track.album, track.name]
+            return [track.artist, self.album.name, track.name, track.data[1]]
 
         # Otherwise, check if the track is long enough
         elif curr_pos - track.data[0] > self.samplerate * 30:
+
+            if track.album_pos == 0:
+                track_num += 1
+                track.album_pos = track_num
+
             # Identify track
-            info = audID.identify_track(track.audio_source, track.data[0], curr_pos)
+            info, identify_at = audID.identify_track(track.audio_source, track.data[0], curr_pos)
             # If there is a result, assign it to the track
             if info['result']:
                 # Set basic info for the track
@@ -163,35 +167,45 @@ class RecordFileSystem:
 
                 # Check if all the results have arrived
                 if 'musicbrainz' in info['result']:
-
                     most_common_album_count = 0
 
+                    end_time = info['result']['musicbrainz'][0]['length']/1000
+
+                    track.data[1] = (end_time - 20) * self.samplerate + track.data[0]
+
+                    new_album = None
                     for version in info['result']['musicbrainz']:
                         for album in version['releases']:
-                            if album['id'] in self.potential_albums:
-                                existing_album = self.potential_albums[album['id']]
-                                album_occurrence = existing_album[1] + 1
-                                title = existing_album[0]
-                            else:
-                                album_occurrence = 1
-                                title = album['title']
+                            track.is_identified = True
+                            if album['media'][0]['track-offset'] + 1 == track_num:
+                                if album['id'] in self.potential_albums:
+                                    existing_album = self.potential_albums[album['id']]
+                                    album_occurrence = existing_album[1] + 1
+                                    title = existing_album[0]
+                                else:
+                                    album_occurrence = 1
+                                    title = album['title']
 
-                            self.potential_albums[album['id']] = [title, album_occurrence]
+                                self.potential_albums[album['id']] = [title, album_occurrence]
 
-                            if album_occurrence > most_common_album_count:
-                                if self.album_id is not album['id']:
-                                    self.album_id = album['id']
-                                    self.album.name = title
-                                    self.album_art.updated = True
+                                if album_occurrence > most_common_album_count:
+                                    if self.album_id is not album['id']:
+                                        new_album = album
 
-                                most_common_album_count = album_occurrence
+                                    most_common_album_count = album_occurrence
 
-                    if self.album_art.updated:
-                        self.album_art.set_image(audID.get_art(self.album_id))
-                        self.album_art.save('recordings/working/album.jpg', False)
-                    track.is_identified = True
+                    if new_album is not None:
+                        self.album_id = new_album['id']
+                        self.album.name = new_album['title']
+                        try:
+                            self.album_art.set_image(audID.get_art(self.album_id))
+                            self.album_art.save('recordings/working/album.jpg', False)
+                            self.album_art.updated = True
+                        except Exception as e:
+                            print(f'Album failure - {e} - id:{self.album_id}')
 
-                return [track.artist, track.album, track.name]
+                if track.is_identified:
+                    return [track.artist, self.album.name, track.name, track.data[1]]
 
         return None
 

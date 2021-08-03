@@ -15,7 +15,7 @@ assert numpy
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
 haltSignal = threading.Event()
-playbackVolume = 0.5
+playbackVolume = 0.0
 q = queue.Queue()
 
 # Initialize the array that gets sent to the gui for the visual waveform
@@ -30,6 +30,7 @@ is_track = False
 track_num = 0
 beginning_of_album = 0
 threshold_data = []
+song_end = 0
 identify_at = 0
 
 # Filesystem head
@@ -74,7 +75,7 @@ def _record(stop_event):
                 curr_pos = current_recording.tell()
                 find_track_edges(curr_pos, data_max)
 
-                # Attempt to identify the current recording, then add thirty sec to the identify counter
+                # Attempt to identify the current recording, then add ten sec to the identify counter
                 if identify_at < curr_pos and executor._work_queue.qsize() < 2:
                     executor.submit(attempt_identification, curr_pos)
                     identify_at += 10 * current_recording.samplerate
@@ -85,19 +86,24 @@ def _record(stop_event):
 
 
 def find_track_edges(curr_pos, data_max):
-    global recording_threshold, is_track, track_num, track, beginning_of_album, identify_at, song_info
+    global recording_threshold, is_track, track_num, track, beginning_of_album, identify_at, song_end
     # Roughly determine if the incoming audio is the beginning or end of a track
     # If there is a non-zero threshold set use that.
     if recording_threshold != 0.0:
-        if data_max > recording_threshold and not is_track:
-            track_num += 1
-            track = AudioFile(str(track_num))
-            track.data[0] = curr_pos
-            file_head.add_track(track)
-            is_track = True
-        elif data_max < recording_threshold and is_track:
-            file_head.set_latest_track_end(curr_pos)
-            is_track = False
+        if is_track:
+            if 0 < song_end < curr_pos and data_max < recording_threshold:
+                is_track = False
+            elif song_end == 0 and data_max < recording_threshold:
+                file_head.set_latest_track_end(curr_pos)
+                is_track = False
+        else:
+            if data_max > recording_threshold and curr_pos > song_end + 3 * samplerate:
+                song_end = 0
+                track_num += 1
+                track = AudioFile(str(track_num))
+                track.data[0] = curr_pos
+                file_head.add_track(track)
+                is_track = True
 
     # Otherwise find the minimum threshold from the album's noise
     else:
@@ -114,12 +120,15 @@ def find_track_edges(curr_pos, data_max):
         # Then add a small amount to ensure that noise is excluded.
         else:
             recording_threshold = statistics.median(threshold_data) + 0.015
-    pass
 
 
 def attempt_identification(curr_pos):
-    global song_info
-    song_info = file_head.identify_latest(curr_pos)
+    global song_info, song_end, identify_at
+    identified_info = file_head.identify_latest(curr_pos)
+    if identified_info is not None:
+        song_info = identified_info[:3]
+        song_end = identified_info[3]
+        identify_at = identified_info[3] + 10 * samplerate
 
 
 def write_to_plot(data):
