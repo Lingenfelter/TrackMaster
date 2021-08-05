@@ -48,6 +48,7 @@ def center_item(name: str):
 def toggle_recording():
     global currently_recording, file_head
     if currently_recording:
+        configure_item('display', show=False)
         option_control()
         set_item_label('rec/stop', 'Record')
         aRec.stop_recording()
@@ -56,6 +57,7 @@ def toggle_recording():
         try:
             file_head = RecordFileSystem()
             aRec.file_head = file_head
+            configure_item('display', show=True)
             if os.path.exists('recordings/working/audio.wav'):
                 os.remove('recordings/working/audio.wav')
             option_control(False)
@@ -102,6 +104,18 @@ def get_subtypes(sender, data):
     set_value('Subtypes', default_subtype)
 
 
+def update_file_viewer():
+    try:
+        clear_table('display')
+        add_row('display', [file_head.artist.name])
+        add_row('display', ['\t' + file_head.album.name])
+        for track in file_head.album.data[1:]:
+            if track.album_pos != 0:
+                add_row('display', ['\t\t' + str(track.album_pos) + ' ' + track.name])
+    except Exception as e:
+        print(e)
+
+
 def show_gui():
     with window('main'):
         with child('l_column', autosize_y=True):
@@ -138,7 +152,8 @@ def show_gui():
             add_separator(name='r_panel_separator')
             add_spacing(count=3)
             with group('file_display'):
-                add_text('File information')
+                add_text('Tracks:')
+                add_table('display', ['Filesystem'], hide_headers=True, show=False)
 
     def resize(sender, data):
         x, y = get_main_window_size()
@@ -155,6 +170,7 @@ def show_gui():
             get_plot_data()
             get_song_info()
             album_art = file_head.get_album_art()
+            update_file_viewer()
             if album_art is not None:
                 clear_drawing('album_image')
                 draw_image('album_image', file_head.get_album_art(), [0.0, 0.0], [200, 200])
