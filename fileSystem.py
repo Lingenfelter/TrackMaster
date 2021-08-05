@@ -201,7 +201,9 @@ class RecordFileSystem:
                         self.album_id = new_album['id']
                         self.album.name = new_album['title']
                         try:
-                            self.album_art.set_image(audID.get_art(self.album_id))
+                            artist, art = audID.get_album_data(self.album_id)
+                            self.artist.name = artist
+                            self.album_art.set_image(art)
                             self.album_art.save('recordings/working/album.jpg', False)
                             self.album_art.updated = True
                         except Exception as e:
