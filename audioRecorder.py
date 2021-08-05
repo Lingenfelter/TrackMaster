@@ -1,3 +1,4 @@
+import os
 import queue
 import statistics
 import sys
@@ -15,7 +16,7 @@ assert numpy
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
 haltSignal = threading.Event()
-playbackVolume = 0.0
+playbackVolume = 0.25
 q = queue.Queue()
 
 # Initialize the array that gets sent to the gui for the visual waveform
@@ -25,6 +26,8 @@ plotRec = numpy.ndarray(shape=(plotRecSize, 2), buffer=numpy.array([[0.0, 0.0] *
 
 recording_threshold = 0.0
 samplerate: int
+filetype: str
+subtype: str
 track: AudioFile
 is_track = False
 track_num = 0
@@ -42,6 +45,16 @@ song_info = [default_msg] * 3
 finished_identification = True
 
 
+def get_formats(): return [x for x in sf.available_formats().keys()]
+
+
+def get_subtype(selected_format): return sf.default_subtype(selected_format), \
+                                         [x for x in sf.available_subtypes(selected_format).keys()]
+
+
+def get_devices(): return [device for device in sd.query_devices() if device['max_input_channels'] > 0]
+
+
 def set_volume(vol):
     global playbackVolume
     playbackVolume = vol
@@ -55,12 +68,12 @@ def callback(indata, outdata, frames, time, status):
     q.put(indata.copy())
 
 
-def _record(stop_event):
+def _record(stop_event, single_album):
     global samplerate, identify_at
-    device = sd.query_devices(None, 'input')
-    samplerate = int(device['default_samplerate'])
+    sd.default.samplerate = samplerate
+    # sd.default.device = device['name']
     with sf.SoundFile('recordings/working/audio.wav', mode='x', samplerate=samplerate,
-                      channels=2) as current_recording:
+                      subtype=subtype, channels=2) as current_recording:
         file_head.samplerate = samplerate
         with sd.Stream(channels=2, callback=callback):
             while not stop_event.is_set():
@@ -82,11 +95,14 @@ def _record(stop_event):
 
                 write_to_plot(data)
 
-            file_head.save_all()
+        if single_album:
+            file_head.single_track()
+
+        file_head.save_all()
 
 
 def find_track_edges(curr_pos, data_max):
-    global recording_threshold, is_track, track_num, track, beginning_of_album, identify_at, song_end
+    global recording_threshold, is_track, track_num, track, beginning_of_album, identify_at, song_end, song_info
     # Roughly determine if the incoming audio is the beginning or end of a track
     # If there is a non-zero threshold set use that.
     if recording_threshold != 0.0:
@@ -98,9 +114,10 @@ def find_track_edges(curr_pos, data_max):
                 is_track = False
         else:
             if data_max > recording_threshold and curr_pos > song_end + 3 * samplerate:
+                song_info[2] = 'identifying...'
                 song_end = 0
                 track_num += 1
-                track = AudioFile(str(track_num))
+                track = AudioFile(str(track_num), '.' + filetype, subtype)
                 track.data[0] = curr_pos
                 file_head.add_track(track)
                 is_track = True
@@ -139,9 +156,18 @@ def write_to_plot(data):
         plotRec = plotRec[-plotRecSize:]
 
 
-def start_recording():
-    haltSignal.clear()
-    executor.submit(_record, haltSignal)
+def start_recording(rec_filetype, rec_subtype, rec_samplerate, single_album=False):
+    try:
+        global plotRec, q, recording_threshold, is_track, filetype, subtype, samplerate
+        filetype, subtype, samplerate = rec_filetype, rec_subtype, rec_samplerate
+        plotRec = numpy.ndarray(shape=(plotRecSize, 2), buffer=numpy.array([[0.0, 0.0] * plotRecSize]))
+        q = queue.Queue()
+        recording_threshold = 0.0
+        is_track = False
+        haltSignal.clear()
+        executor.submit(_record, haltSignal, single_album)
+    except Exception as e:
+        print(e)
 
 
 def stop_recording():
