@@ -27,7 +27,7 @@ def identify_track(file: str, beginning, end, dump=True):
     if dump:
         with open('track.json', 'w') as f:
             json.dump(result, f, indent=4)
-    return result, seek
+    return result
 
 
 def get_art(release_id):

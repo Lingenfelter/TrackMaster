@@ -30,9 +30,12 @@ class Directory(File):
         child.parent = self
 
     def save(self):
-        path = self.get_path()
-        if not os.path.exists(path):
-            os.mkdir(path)
+        try:
+            path = self.get_path()
+            if not os.path.exists(path):
+                os.mkdir(path)
+        except Exception as e:
+            print(f'Directory save fail - {e}')
 
     def save_tree(self):
         self.save()
@@ -47,9 +50,10 @@ class Directory(File):
 
 
 class AudioFile(File):
-    def __init__(self, name='', filetype='.wav'):
+    def __init__(self, name='', filetype='.wav', subtype='PCM_16'):
         File.__init__(self, name, filetype, data=[0, None])
         self.audio_source = 'recordings/working/audio.wav'
+        self.subtype = subtype
         self.padding = 0.0  # Seconds added before and after a track
         self.album_pos = 0
         self.artist = ''
@@ -68,19 +72,21 @@ class AudioFile(File):
         self.data[1] = target.data[1]
 
     def save(self):
-        # All print statements are for real-time use debugging, will be used to monitor when connected
-        # to a record player.
-        min_length = 30 * self.samplerate
-        if self.data[1] - self.data[0] > min_length:
-            with sf.SoundFile(self.audio_source) as source:
-                # Get the beginning of the track
-                start = int(self.data[0])
-                padding = int(self.padding * source.samplerate)
-                # Get the running time of the track
-                frames = (int(self.data[1]) - start)
-                try:
-                    # Save the track in a "## - name.file" convention.
-                    self.name = str('{:02d}'.format(self.album_pos)) + ' - ' + self.name
+        try:
+            # All print statements are for real-time use debugging, will be used to monitor when connected
+            # to a record player.
+            min_length = 30 * self.samplerate
+            if self.data[1] - self.data[0] > min_length:
+                with sf.SoundFile(self.audio_source) as source:
+                    # Get the beginning of the track
+                    start = int(self.data[0])
+                    padding = int(self.padding * source.samplerate)
+                    # Get the running time of the track
+                    frames = (int(self.data[1]) - start)
+
+                    if self.album_pos != 0:
+                        # Save the track in a "## - name.file" convention.
+                        self.name = str('{:02d}'.format(self.album_pos)) + ' - ' + self.name
 
                     # Add a small amount of recording padding to ensure that the whole note that triggered
                     # the recording is captured.
@@ -89,12 +95,9 @@ class AudioFile(File):
 
                     source.seek(start)
                     path = self.get_path() + self.filetype
-                    sf.write(path, source.read(frames=frames), source.samplerate)
-                except Exception as e:
-                    print('-' * 50)
-                    print('exception:', e)
-                    print(f'track {self.name} \t start: {start} \t end: {self.data[1]} \t diff {frames} ')
-                    print('-' * 50)
+                    sf.write(path, source.read(frames=frames), source.samplerate, self.subtype)
+        except Exception as e:
+            print(f'Audio save fail - {e}')
 
 
 class ImageFile(File):
@@ -107,15 +110,16 @@ class ImageFile(File):
 
     def save(self, path=None, close=True):
         try:
-            if path is None:
-                path = self.get_path() + self.filetype
-            if os.path.exists(path):
-                os.remove(path)
-            self.data.save(path)
-            if close:
-                self.data.close()
+            if self.data is not None:
+                if path is None:
+                    path = self.get_path() + self.filetype
+                if os.path.exists(path):
+                    os.remove(path)
+                self.data.save(path)
+                if close:
+                    self.data.close()
         except Exception as e:
-            print(f'exception: {e}')
+            print(f'Image save fail - {e}')
 
 
 class RecordFileSystem:
@@ -124,7 +128,6 @@ class RecordFileSystem:
         self.album = Directory('album')
         self.album_art = ImageFile('img')
         self.samplerate = 0
-        self.identify_at = 30
         self.potential_albums = {}
         self.album_id = None
 
@@ -152,7 +155,7 @@ class RecordFileSystem:
                 track.album_pos = track_num
 
             # Identify track
-            info, identify_at = audID.identify_track(track.audio_source, track.data[0], curr_pos)
+            info = audID.identify_track(track.audio_source, track.data[0], curr_pos)
             # If there is a result, assign it to the track
             if info['result']:
                 # Set basic info for the track
@@ -229,5 +232,28 @@ class RecordFileSystem:
             return 'recordings/working/album.jpg'
         return None
 
+    def single_track(self):
+        try:
+            track_list = self.album.data
+            beginning = track_list[1].data[0]
+            end = track_list[-1].data[1]
+
+            filetype = track_list[1].filetype
+            subtype = track_list[1].subtype
+
+            for el in self.album.data:
+                if isinstance(el, AudioFile):
+                    self.album.remove_element(el)
+
+            track = AudioFile('album', filetype, subtype)
+            track.data[0] = beginning
+            track.data[1] = end
+            self.add_track(track)
+        except Exception as e:
+            print(f'Album save error - {e}')
+
     def save_all(self):
-        self.artist.save_tree()
+        try:
+            self.artist.save_tree()
+        except Exception as e:
+            print(f'Save fail -- {e}')

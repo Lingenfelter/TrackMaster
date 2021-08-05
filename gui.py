@@ -1,7 +1,10 @@
 from dearpygui.core import *
 from dearpygui.simple import *
+
+import audioRecorder
 import audioRecorder as aRec
 from fileSystem import RecordFileSystem
+import os
 
 currently_recording = False
 x_range = [x for x in range(aRec.plotRecSize)]
@@ -11,6 +14,12 @@ file_head: RecordFileSystem
 
 center_items = []
 add_data('item_center_list', center_items)
+
+filetypes = audioRecorder.get_formats()
+default_filetype = 'WAV'
+input_devices = aRec.get_devices()
+default_subtype, subtypes = aRec.get_subtype(default_filetype)
+samplerates = ['44100', '48000', '88200', '96000']
 
 
 def apply_centering():
@@ -37,19 +46,35 @@ def center_item(name: str):
 
 
 def toggle_recording():
-    global currently_recording
+    global currently_recording, file_head
     if currently_recording:
+        option_control()
         set_item_label('rec/stop', 'Record')
         aRec.stop_recording()
         currently_recording = False
     else:
-        set_item_label('rec/stop', 'Stop Recording')
-        aRec.start_recording()
-        currently_recording = True
+        try:
+            file_head = RecordFileSystem()
+            aRec.file_head = file_head
+            if os.path.exists('recordings/working/audio.wav'):
+                os.remove('recordings/working/audio.wav')
+            option_control(False)
+            set_item_label('rec/stop', 'Stop Recording')
+            # aRec.device = get_value('Input Device')
+            aRec.start_recording(get_value('Filetype'), get_value('Subtypes'),
+                                 int(get_value('Samplerate')), get_value('Single Album Recording'))
+            currently_recording = True
+        except Exception as e:
+            print(e)
 
 
 def send_volume(sender, data):
     aRec.set_volume(get_value(sender))
+
+
+def option_control(enabled=True):
+    for item in get_item_children('options'):
+        configure_item(item, enabled=enabled)
 
 
 def get_plot_data():
@@ -68,18 +93,36 @@ def get_song_info():
         set_value('song', 'Song:' + data[2])
 
 
+def get_subtypes(sender, data):
+    global default_subtype, subtypes
+    curr_format = get_value('Filetype')
+    curr_format = default_filetype if curr_format is None else curr_format
+    default_subtype, subtypes = aRec.get_subtype(format)
+    configure_item('Subtypes', items=subtypes)
+    set_value('Subtypes', default_subtype)
+
+
 def show_gui():
     with window('main'):
         with child('l_column', autosize_y=True):
-            add_plot('audio_plot', label='', height=300, no_mouse_pos=True,
-                     xaxis_no_tick_labels=True, yaxis_no_tick_labels=True, xaxis_no_tick_marks=True,
-                     yaxis_no_tick_marks=True)
-            set_plot_ylimits('audio_plot', -1, 1)
+            with group('waveform'):
+                add_plot('audio_plot', label='', height=300, no_mouse_pos=True,
+                         xaxis_no_tick_labels=True, yaxis_no_tick_labels=True, xaxis_no_tick_marks=True,
+                         yaxis_no_tick_marks=True)
+                set_plot_ylimits('audio_plot', -1, 1)
+                add_button('rec/stop', label='Record', callback=toggle_recording, width=150, height=50)
+                add_same_line()
+                add_slider_float('volume', min_value=0, max_value=1, default_value=aRec.playbackVolume,
+                                 callback=send_volume, width=200)
 
-            add_button('rec/stop', label='Record', callback=toggle_recording, width=150, height=50)
-            add_same_line()
-            add_slider_float('volume', min_value=0, max_value=1, default_value=aRec.playbackVolume,
-                             callback=send_volume, width=200)
+            with group('options'):
+                add_combo('Filetype', items=filetypes, default_value=default_filetype, width=100)
+                add_same_line()
+                add_combo('Subtypes', items=subtypes, default_value=default_subtype, width=100)
+                set_item_callback('Filetype', get_subtypes)
+                add_combo('Samplerate', items=samplerates, default_value=samplerates[0], width=100)
+                # add_combo('Input Device', items=input_devices, height_largest=True)
+                add_checkbox('Single Album Recording')
 
         add_same_line()
 
