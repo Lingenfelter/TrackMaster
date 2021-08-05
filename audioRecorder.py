@@ -30,7 +30,6 @@ filetype: str
 subtype: str
 track: AudioFile
 is_track = False
-track_num = 0
 beginning_of_album = 0
 threshold_data = []
 song_end = 0
@@ -102,7 +101,7 @@ def _record(stop_event, single_album):
 
 
 def find_track_edges(curr_pos, data_max):
-    global recording_threshold, is_track, track_num, track, beginning_of_album, identify_at, song_end, song_info
+    global recording_threshold, is_track, track, beginning_of_album, identify_at, song_end, song_info
     # Roughly determine if the incoming audio is the beginning or end of a track
     # If there is a non-zero threshold set use that.
     if recording_threshold != 0.0:
@@ -116,8 +115,7 @@ def find_track_edges(curr_pos, data_max):
             if data_max > recording_threshold and curr_pos > song_end + 3 * samplerate:
                 song_info[2] = 'identifying...'
                 song_end = 0
-                track_num += 1
-                track = AudioFile(str(track_num), '.' + filetype, subtype)
+                track = AudioFile('', '.' + filetype, subtype)
                 track.data[0] = curr_pos
                 file_head.add_track(track)
                 is_track = True
