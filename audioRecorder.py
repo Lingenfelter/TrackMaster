@@ -1,4 +1,3 @@
-import os
 import queue
 import statistics
 import sys
@@ -97,6 +96,7 @@ def _record(stop_event, single_album):
         if single_album:
             file_head.single_track()
 
+        file_head.expand_tracks(beginning_of_album, curr_pos)
         file_head.save_all()
 
 

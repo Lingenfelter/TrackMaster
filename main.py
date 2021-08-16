@@ -15,8 +15,4 @@ if __name__ == '__main__':
     FINGERPRINTING_KEY = os.environ.get('API_KEY')
     audID.FINGERPRINTING_KEY = FINGERPRINTING_KEY
 
-    # audID.get_sample('recordings/artist/album/11 - 491.wav', 'recordings/working/test.wav')
-    # audID.identify('recordings/working/test.wav')
-    # audID.get_data('David Bowie', 'Starman')
-
     gui.show_gui()

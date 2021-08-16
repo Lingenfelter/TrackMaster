@@ -9,7 +9,7 @@ brain.set_useragent('TrackMaster', '0.1', 'M.Lingenfelter92@gmail.com')
 
 
 def identify_track(file: str, beginning, end, dump=True):
-    output = 'recordings/working/identify.wav'
+    output = 'recordings/working/identify.flac'
     with sf.SoundFile(file) as source:
         time_to_identify = source.samplerate * 25
         frames = end - beginning
@@ -38,7 +38,6 @@ def get_album_data(release_id):
     result = brain.get_release_by_id(release_id, includes=['artists'])
 
     with open('data.json', 'w') as f:
-        print
         json.dump(result, f, indent=4)
 
     return result['release']['artist-credit-phrase'], get_art(release_id)

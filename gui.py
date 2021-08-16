@@ -12,13 +12,17 @@ x_range = [x for x in range(aRec.plotRecSize)]
 # Filesystem head
 file_head: RecordFileSystem
 
+savePath = os.path.expanduser('~\\Music')
+
 center_items = []
 add_data('item_center_list', center_items)
 
 filetypes = audioRecorder.get_formats()
 default_filetype = 'WAV'
 input_devices = aRec.get_devices()
-default_subtype, subtypes = aRec.get_subtype(default_filetype)
+default_subtype = aRec.sf.default_subtype(default_filetype)
+subtype_dict = aRec.sf.available_subtypes(default_filetype)
+subtypes = [key for key in subtype_dict]
 samplerates = ['44100', '48000', '88200', '96000']
 
 
@@ -57,6 +61,7 @@ def toggle_recording():
         try:
             file_head = RecordFileSystem()
             aRec.file_head = file_head
+            file_head.set_dir(savePath)
             configure_item('display', show=True)
             if os.path.exists('recordings/working/audio.wav'):
                 os.remove('recordings/working/audio.wav')
@@ -83,8 +88,8 @@ def get_plot_data():
     data = aRec.get_plotRec()
     add_line_series('audio_plot', 'right channel', x_range, data[0], weight=2.5)
     add_line_series('audio_plot', 'left channel', x_range, data[1], weight=2.5, color=[155, 50, 50, 75])
-    bounds = aRec.recording_threshold
-    add_hline_series('audio_plot', 'bounds', [bounds, -bounds])
+    # bounds = aRec.recording_threshold
+    # add_hline_series('audio_plot', 'bounds', [bounds, -bounds])
 
 
 def get_song_info():
@@ -96,12 +101,20 @@ def get_song_info():
 
 
 def get_subtypes(sender, data):
-    global default_subtype, subtypes
+    global default_subtype, subtype_dict, subtypes
     curr_format = get_value('Filetype')
     curr_format = default_filetype if curr_format is None else curr_format
-    default_subtype, subtypes = aRec.get_subtype(format)
+    default_subtype = aRec.sf.default_subtype(curr_format)
+    subtype_dict = aRec.sf.available_subtypes(curr_format)
+    subtypes = [key for key in subtype_dict]
     configure_item('Subtypes', items=subtypes)
     set_value('Subtypes', default_subtype)
+    set_value('subtype_desc', subtype_dict[default_subtype])
+
+
+def subtype_desc(sender, data):
+    subtype = get_value('Subtypes')
+    set_value('subtype_desc', subtype_dict[subtype])
 
 
 def update_file_viewer():
@@ -114,6 +127,16 @@ def update_file_viewer():
                 add_row('display', ['\t\t' + str(track.album_pos) + ' ' + track.name])
     except Exception as e:
         print(e)
+
+
+def select_folder(sender, data):
+    select_directory_dialog(callback=save_folder)
+
+
+def save_folder(sender, data):
+    global savePath
+    savePath = data[0] + '\\' + data[1]
+    set_value('path_display', 'Save to: ' + savePath)
 
 
 def show_gui():
@@ -129,15 +152,25 @@ def show_gui():
                 add_slider_float('volume', min_value=0, max_value=1, default_value=aRec.playbackVolume,
                                  callback=send_volume, width=200)
 
+            add_spacing(count=5)
+
             with group('options'):
+                add_button('Browse', callback=select_folder)
+                add_same_line()
+                add_label_text('path_display', label='')
+                add_spacing(count=5)
                 add_combo('Filetype', items=filetypes, default_value=default_filetype, width=100)
                 add_same_line()
-                add_combo('Subtypes', items=subtypes, default_value=default_subtype, width=100)
+                add_combo('Subtypes', items=subtypes, default_value=default_subtype, width=100, callback=subtype_desc)
                 set_item_callback('Filetype', get_subtypes)
+                add_same_line()
+                add_label_text('subtype_desc', label='')
                 add_combo('Samplerate', items=samplerates, default_value=samplerates[0], width=100)
                 # add_combo('Input Device', items=input_devices, height_largest=True)
                 add_checkbox('Single Album Recording')
 
+        set_value('path_display', 'Save to: ' + savePath)
+        set_value('subtype_desc', subtype_dict[default_subtype])
         add_same_line()
 
         with child('r_column', autosize_x=True, autosize_y=True):
