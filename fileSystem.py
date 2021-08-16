@@ -77,6 +77,7 @@ class AudioFile(File):
             # to a record player.
             min_length = 30 * self.samplerate
             if self.data[1] - self.data[0] > min_length:
+                print(f'saving {self.name}')
                 with sf.SoundFile(self.audio_source) as source:
                     # Get the beginning of the track
                     start = int(self.data[0])
@@ -96,6 +97,9 @@ class AudioFile(File):
                     source.seek(start)
                     path = self.get_path() + self.filetype
                     sf.write(path, source.read(frames=frames), source.samplerate, self.subtype)
+                    print(f'{self.name} -- Beginning:{self.data[0]} -- End:{self.data[1]}')
+            else:
+                print(self.name, 'not long enough')
         except Exception as e:
             print(f'Audio save fail - {e}')
 
@@ -198,6 +202,7 @@ class RecordFileSystem:
                                     most_common_album_count = album_occurrence
 
                     if new_album is not None:
+                        print('New Album')
                         self.album_id = new_album['id']
                         self.album.name = new_album['title']
                         try:
@@ -253,6 +258,28 @@ class RecordFileSystem:
             self.add_track(track)
         except Exception as e:
             print(f'Album save error - {e}')
+
+    def expand_tracks(self, album_start, album_end):
+        try:
+            print(f'Album start:{album_start} - Album end:{album_end}')
+            track_list = self.album.data[1:]
+            track_list[0].data[0] -= (track_list[0].data[0] - album_start)//2
+            track_list[-1].data[1] += (track_list[-1].data[1] - album_end)//2
+            prev_track = track_list[0]
+            for idx in range(1, len(track_list)-1):
+                curr_track = track_list[idx]
+                if curr_track.album_pos != 0:
+                    midpoint_length = (prev_track.data[1] - curr_track.data[0])//2
+                    prev_track.data[1] += midpoint_length
+                    curr_track.data[0] -= midpoint_length
+                    print(f'{prev_track.name} & {curr_track.name} - {midpoint_length = }')
+                    prev_track = curr_track
+        except Exception as e:
+            print(f'Expand error - {e}')
+
+    def set_dir(self, user_dir):
+        global saveDir
+        saveDir = user_dir
 
     def save_all(self):
         try:
