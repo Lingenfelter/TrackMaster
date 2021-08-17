@@ -21,9 +21,11 @@ https://user-images.githubusercontent.com/50857801/129616813-852ab81d-0f3d-4ce5-
 * Python-dotenv - [GitHub](https://github.com/theskumar/python-dotenv) and [PyPi](https://pypi.org/project/python-dotenv/)
 
 ## Running Instructions
-1. Plug-in record player into your computer
-2. Run main.py file
-3. Adjust the save directory and any settings
-4. Press 'Record' button
-5. Start playing your record like normal
-6. Press 'Stop Recording' when finished
+1. Download the required packages
+2. Update the .env file with your [AudD API key](https://audd.io)
+3. Plug-in record player into your computer
+4. Run main.py file
+5. Adjust the save directory and any settings
+6. Press 'Record' button
+7. Start playing your record like normal
+8. Press 'Stop Recording' when finished
