@@ -18,6 +18,7 @@ https://user-images.githubusercontent.com/50857801/129616813-852ab81d-0f3d-4ce5-
 * Numpy - [GitHub](https://github.com/numpy/numpy) and [PyPi](https://pypi.org/project/numpy/)
 * MusicBrainzngs - [PyPi](https://pypi.org/project/musicbrainzngs/)
 * Pillow - [GitHub](https://github.com/python-pillow/Pillow) and [PyPi](https://pypi.org/project/Pillow/)
+* Python-dotenv - [GitHub](https://github.com/theskumar/python-dotenv) and [PyPi](https://pypi.org/project/python-dotenv/)
 
 ## Running Instructions
 1. Plug-in record player into your computer
